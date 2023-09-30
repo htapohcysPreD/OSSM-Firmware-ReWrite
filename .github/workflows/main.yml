@@ -1,0 +1,30 @@
+name: ESP Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+    - name: esp-idf build
+      uses: espressif/esp-idf-ci-action@v1
+      with:
+        esp_idf_version: v5.1.1
+        target: esp32
+        path: '.'
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: firmware_ossm
+        path: ./build/OSSM.bin
