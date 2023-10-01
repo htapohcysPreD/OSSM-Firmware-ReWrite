@@ -11,16 +11,15 @@
 #include "led_strip_encoder.h"
 
 /****************************** Configuration */
-#define RMT_LED_STRIP_RESOLUTION_HZ 10000000 // 10MHz resolution
+#define RMT_LED_STRIP_RESOLUTION_HZ 10000000  // 10MHz resolution
 
 /****************************** Statics */
 static const char *TAG = "LED";
 
 /****************************** Functions */
 
-void LEDObject::hsv2rgb(uint32_t h, uint32_t s, uint32_t v, uint32_t *r, uint32_t *g, uint32_t *b)
-{
-    h %= 360; // h -> [0,360]
+void LEDObject::hsv2rgb(uint32_t h, uint32_t s, uint32_t v, uint32_t *r, uint32_t *g, uint32_t *b) {
+    h %= 360;  // h -> [0,360]
     uint32_t rgb_max = v * 2.55f;
     uint32_t rgb_min = rgb_max * (100 - s) / 100.0f;
 
@@ -30,8 +29,7 @@ void LEDObject::hsv2rgb(uint32_t h, uint32_t s, uint32_t v, uint32_t *r, uint32_
     // RGB adjustment amount by hue
     uint32_t rgb_adj = (rgb_max - rgb_min) * diff / 60;
 
-    switch (i)
-    {
+    switch (i) {
         case 0:
             *r = rgb_max;
             *g = rgb_min + rgb_adj;
@@ -64,10 +62,9 @@ void LEDObject::hsv2rgb(uint32_t h, uint32_t s, uint32_t v, uint32_t *r, uint32_
             break;
     }
 }
-esp_err_t LEDObject::SetLED(const uint16_t index, const uint8_t red, const uint8_t green, const uint8_t blue)
-{
+esp_err_t LEDObject::SetLED(const uint16_t index, const uint8_t red, const uint8_t green, const uint8_t blue) {
     rmt_transmit_config_t tx_config = {};
-    tx_config.loop_count = 0; // no transfer loop
+    tx_config.loop_count = 0;  // no transfer loop
 
     if (index >= NumLeds) return ESP_ERR_INVALID_ARG;
 
@@ -82,23 +79,20 @@ esp_err_t LEDObject::SetLED(const uint16_t index, const uint8_t red, const uint8
 
     return ESP_OK;
 }
-LEDObject::LEDObject(const uint16_t number, const gpio_num_t pin)
-{
+LEDObject::LEDObject(const uint16_t number, const gpio_num_t pin) {
     NumLeds = number;
     OutPin = pin;
 
-    pLedData = (uint8_t *)malloc(number * 3);
+    pLedData = reinterpret_cast<uint8_t *>(malloc(number * 3));
 }
-LEDObject::~LEDObject()
-{
+LEDObject::~LEDObject() {
     free(pLedData);
 }
-esp_err_t LEDObject::Create()
-{
+esp_err_t LEDObject::Create() {
     led_chan = NULL;
     rmt_tx_channel_config_t tx_chan_config = {};
     tx_chan_config.gpio_num = OutPin;
-    tx_chan_config.clk_src = RMT_CLK_SRC_DEFAULT; // select source clock
+    tx_chan_config.clk_src = RMT_CLK_SRC_DEFAULT;  // select source clock
     tx_chan_config.resolution_hz = RMT_LED_STRIP_RESOLUTION_HZ;
     tx_chan_config.mem_block_symbols = 64;
     tx_chan_config.trans_queue_depth = 4;

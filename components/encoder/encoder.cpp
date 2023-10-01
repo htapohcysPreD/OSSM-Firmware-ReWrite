@@ -23,17 +23,13 @@ QueueHandle_t xEncoderQ = NULL;
 /**
  * @brief ISR handler for pressed encoder button
  */
-static void IRAM_ATTR button_isr_handler(void *arg)
-{
+static void IRAM_ATTR button_isr_handler(void *arg) {
     static int presstime = 0;
     int payload = 0;
 
-    if (gpio_get_level(ENCODER_SW_PIN) == 1) // Falling edge
-    {
+    if (gpio_get_level(ENCODER_SW_PIN) == 1) {  // Falling edge
         presstime = esp_timer_get_time();
-    }
-    else // Rising edge
-    {
+    } else {  // Rising edge
         payload = (esp_timer_get_time() - presstime) / 1000;
         presstime = 0;
     }
@@ -44,16 +40,14 @@ static void IRAM_ATTR button_isr_handler(void *arg)
 /**
  * @brief ISR handler when reaching watchpoints
  */
-static bool pcnt_on_reach(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *user_ctx)
-{
+static bool pcnt_on_reach(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *user_ctx) {
     if ((edata->watch_point_value < 0) && (EncoderValue > 0)) EncoderValue--;
     if ((edata->watch_point_value > 0) && (EncoderValue < 100)) EncoderValue++;
     if (NULL != xEncoderQ) xQueueOverwrite(xEncoderQ, &EncoderValue);
     return false;
 }
 
-Encoder::Encoder(const gpio_num_t button, const gpio_num_t pinA, const gpio_num_t pinB)
-{
+Encoder::Encoder(const gpio_num_t button, const gpio_num_t pinA, const gpio_num_t pinB) {
     pinButton = button;
     pinEncA = pinA;
     pinEncB = pinB;
@@ -62,12 +56,10 @@ Encoder::Encoder(const gpio_num_t button, const gpio_num_t pinA, const gpio_num_
     xEncoderQ = NULL;
 }
 Encoder::~Encoder() {}
-int Encoder::GetCount(void)
-{
+int Encoder::GetCount(void) {
     return EncoderValue;
 }
-esp_err_t Encoder::Create(QueueHandle_t &xQueueE, QueueHandle_t &xQueueB)
-{
+esp_err_t Encoder::Create(QueueHandle_t &xQueueE, QueueHandle_t &xQueueB) {
     // Set up the encoders button
     gpio_config_t io_conf = {};
     io_conf.intr_type = GPIO_INTR_ANYEDGE;
@@ -122,8 +114,7 @@ esp_err_t Encoder::Create(QueueHandle_t &xQueueE, QueueHandle_t &xQueueB)
 
     // Watchpoints
     int watch_points[] = {ENC_LOW_LIMIT, 0, ENC_HIGH_LIMIT};
-    for (size_t i = 0; i < sizeof(watch_points) / sizeof(watch_points[0]); i++)
-    {
+    for (size_t i = 0; i < sizeof(watch_points) / sizeof(watch_points[0]); i++) {
         ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcnt_unit, watch_points[i]));
     }
     pcnt_event_callbacks_t cbs = {

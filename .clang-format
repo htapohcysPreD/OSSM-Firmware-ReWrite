@@ -4,7 +4,9 @@ IndentWidth: 4
 ColumnLimit: 120
 ---
 Language: Cpp
-BreakBeforeBraces: Allman
-SpacesBeforeTrailingComments: 1
+BreakBeforeBraces: Attach
+SpacesBeforeTrailingComments: 2
 AllowShortFunctionsOnASingleLine: Empty
+IndentAccessModifiers: false
+AccessModifierOffset: -3
 ---

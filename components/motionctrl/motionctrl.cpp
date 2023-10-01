@@ -22,14 +22,13 @@
 /****************************** Statics */
 static const char* TAG = "MOTION";
 
-QueueHandle_t xADCQueue;           // The Queue to receive ADC Values from
-TaskHandle_t xWorkerHandle = NULL; // The Worker Task Handle
+QueueHandle_t xADCQueue;            // The Queue to receive ADC Values from
+TaskHandle_t xWorkerHandle = NULL;  // The Worker Task Handle
 
 /****************************** Functions */
 
 MotionCtrl::MotionCtrl(const gpio_num_t EnaPin, const gpio_num_t AlmPin, const gpio_num_t STPPin,
-                       const gpio_num_t DIRPin)
-{
+                       const gpio_num_t DIRPin) {
     xADCQueue = NULL;
     xWorkerHandle = NULL;
     RunMode = Modes::NONE;
@@ -40,35 +39,29 @@ MotionCtrl::MotionCtrl(const gpio_num_t EnaPin, const gpio_num_t AlmPin, const g
     MotorDirPin = DIRPin;
 }
 
-MotionCtrl::~MotionCtrl()
-{
-    if (xWorkerHandle != NULL)
-    {
+MotionCtrl::~MotionCtrl() {
+    if (xWorkerHandle != NULL) {
         vTaskDelete(xWorkerHandle);
     }
 }
 
 // Alarm Interrupt Handler
-static void IRAM_ATTR alarm_isr_handler(void* arg)
-{
-    MotionCtrl* pMotionCtrl = (MotionCtrl*)arg;
+static void IRAM_ATTR alarm_isr_handler(void* arg) {
+    MotionCtrl* pMotionCtrl = reinterpret_cast<MotionCtrl*>(arg);
     pMotionCtrl->RequestModeSet(MotionCtrl::Modes::EMERGENCYSTOP);
 }
 
 // Enable Motor On/Off
-static inline void MotorOnOff(MotionCtrl* pCtrl, const bool On)
-{
-    gpio_set_level(pCtrl->getEnaPin(), (On) ? 0 : 1); // Low Active!
+static inline void MotorOnOff(MotionCtrl* pCtrl, const bool On) {
+    gpio_set_level(pCtrl->getEnaPin(), (On) ? 0 : 1);  // Low Active!
 }
 
 // Generate a specific number of steps
-static uint16_t makeSteps(gpio_num_t pin, uint16_t steps, bool GoFast = false)
-{
+static uint16_t makeSteps(gpio_num_t pin, uint16_t steps, bool GoFast = false) {
     uint16_t delay = 1250;
     if (GoFast) delay = delay / 2;
 
-    for (uint16_t i = 0; i < steps; i++)
-    {
+    for (uint16_t i = 0; i < steps; i++) {
         gpio_set_level(pin, 1);
         usleep(delay);
         gpio_set_level(pin, 0);
@@ -78,23 +71,19 @@ static uint16_t makeSteps(gpio_num_t pin, uint16_t steps, bool GoFast = false)
 }
 
 // Run until endpoint is reached
-static uint32_t gotoEndpoint(MotionCtrl* pCtrl, uint32_t MaxSteps, uint32_t cOffset, uint32_t cLimit)
-{
+static uint32_t gotoEndpoint(MotionCtrl* pCtrl, uint32_t MaxSteps, uint32_t cOffset, uint32_t cLimit) {
     const uint32_t StepsPerLoop = 10;
     uint32_t StepsDone = 0;
     const uint32_t stepsPerMM =
         pCtrl->getMotorData().StepsPerRev / (pCtrl->getMotorData().PulleyTeeth * pCtrl->getMotorData().BeltPitch);
 
-    for (uint32_t Step = 0; Step < MaxSteps; Step += StepsPerLoop)
-    {
+    for (uint32_t Step = 0; Step < MaxSteps; Step += StepsPerLoop) {
         int adcval;
         StepsDone += makeSteps(pCtrl->getStepPin(), StepsPerLoop);
 
-        if (xQueueReceive(xADCQueue, &adcval, portMAX_DELAY) == pdTRUE)
-        {
-            uint32_t current = abs((int)(adcval - cOffset));
-            if (current >= cLimit)
-            {
+        if (xQueueReceive(xADCQueue, &adcval, portMAX_DELAY) == pdTRUE) {
+            uint32_t current = abs(static_cast<int>(adcval - cOffset));
+            if (current >= cLimit) {
                 ESP_LOGI(TAG, "Endpoint reached, Steps=%ld", StepsDone);
                 return StepsDone;
             }
@@ -109,15 +98,14 @@ static uint32_t gotoEndpoint(MotionCtrl* pCtrl, uint32_t MaxSteps, uint32_t cOff
  *
  * @return float Stroke in mm
  */
-static float do_Homing(MotionCtrl* pCtrl)
-{
-    const uint8_t numAverage = 100;    // Number of Samples for Averaging
-    const uint16_t maxLength = 300;    // Maximum Length in mm
-    const uint32_t currentLimit = 200; // Delta of Current Offset to detect limit
+static float do_Homing(MotionCtrl* pCtrl) {
+    const uint8_t numAverage = 100;     // Number of Samples for Averaging
+    const uint16_t maxLength = 300;     // Maximum Length in mm
+    const uint32_t currentLimit = 200;  // Delta of Current Offset to detect limit
     const uint32_t stepsPerMM =
         pCtrl->getMotorData().StepsPerRev / (pCtrl->getMotorData().PulleyTeeth * pCtrl->getMotorData().BeltPitch);
     const uint32_t MaxSteps = maxLength * stepsPerMM;
-    const uint32_t EndpointDistance = 5 * stepsPerMM; // 5mm distance in Steps // TODO Make changeable
+    const uint32_t EndpointDistance = 5 * stepsPerMM;  // 5mm distance in Steps // TODO Make changeable
     uint32_t strokeSteps = 0;
     float strokeDistance = 0.0;
 
@@ -125,16 +113,14 @@ static float do_Homing(MotionCtrl* pCtrl)
 
     ESP_LOGI(TAG, "Homing...");
 
-    MotorOnOff(pCtrl, 0); // Turn Motor OFF
+    MotorOnOff(pCtrl, 0);  // Turn Motor OFF
     vTaskDelay(500 / portTICK_PERIOD_MS);
-    MotorOnOff(pCtrl, 1); // Turn Motor ON
+    MotorOnOff(pCtrl, 1);  // Turn Motor ON
     vTaskDelay(100 / portTICK_PERIOD_MS);
 
-    for (uint8_t i = 0; i < numAverage; i++)
-    {
+    for (uint8_t i = 0; i < numAverage; i++) {
         uint16_t adcval;
-        if (xQueueReceive(xADCQueue, &adcval, portMAX_DELAY) == pdTRUE)
-        {
+        if (xQueueReceive(xADCQueue, &adcval, portMAX_DELAY) == pdTRUE) {
             CurrentOffset += adcval;
         }
     }
@@ -164,40 +150,35 @@ static float do_Homing(MotionCtrl* pCtrl)
     makeSteps(pCtrl->getStepPin(), EndpointDistance);
     strokeSteps = strokeSteps - EndpointDistance;
 
-    strokeDistance = ((float)strokeSteps / stepsPerMM);
+    strokeDistance = (static_cast<float>(strokeSteps) / stepsPerMM);
     ESP_LOGI(TAG, "Homing done, distance is %ld steps or %.2f mm", strokeSteps, strokeDistance);
 
     return strokeDistance;
 }
 
 // The Worker Task
-static void vWorker(void* pvParameter)
-{
+static void vWorker(void* pvParameter) {
     MotionCtrl::Modes currentMode = MotionCtrl::Modes::NONE;
-    MotionCtrl* pCtrl = (MotionCtrl*)pvParameter;
-    float detectedStroke = 0.0; // Stroke in mm
+    MotionCtrl* pCtrl = reinterpret_cast<MotionCtrl*>(pvParameter);
+    float detectedStroke = 0.0;  // Stroke in mm
 
-    while (1)
-    {
+    while (1) {
         // Handle State Change Request
-        if (pCtrl->RequestModeGet() != MotionCtrl::Modes::NONE)
-        {
+        if (pCtrl->RequestModeGet() != MotionCtrl::Modes::NONE) {
             ESP_LOGI(TAG, "Requested Mode: %d", (int)pCtrl->RequestModeGet());
 
-            switch (pCtrl->RequestModeGet())
-            {
+            switch (pCtrl->RequestModeGet()) {
                 case MotionCtrl::Modes::NONE:
                     // Nothing to do
                     break;
                 case MotionCtrl::Modes::HOMING:
-                    currentMode = MotionCtrl::Modes::HOMING; // Allowed from every state
+                    currentMode = MotionCtrl::Modes::HOMING;  // Allowed from every state
                     break;
                 case MotionCtrl::Modes::READY:
                     // Not allowed manually
                     break;
-                case MotionCtrl::Modes::STROKE: // Only allowed from READY
-                    if (currentMode == MotionCtrl::Modes::READY)
-                    {
+                case MotionCtrl::Modes::STROKE:  // Only allowed from READY
+                    if (currentMode == MotionCtrl::Modes::READY) {
                         currentMode = MotionCtrl::Modes::STROKE;
                     }
                     break;
@@ -207,39 +188,35 @@ static void vWorker(void* pvParameter)
             }
             ESP_LOGI(TAG, "New Mode: %d", (int)currentMode);
         }
-        pCtrl->RequestModeSet(MotionCtrl::Modes::NONE); // Clear request
+        pCtrl->RequestModeSet(MotionCtrl::Modes::NONE);  // Clear request
         pCtrl->CurrentModeSet(currentMode);
 
         // Do the Stuff
-        switch (currentMode)
-        {
+        switch (currentMode) {
             case MotionCtrl::Modes::NONE:
-                MotorOnOff(pCtrl, 0); // Turn Motor OFF
+                MotorOnOff(pCtrl, 0);  // Turn Motor OFF
                 break;
             case MotionCtrl::Modes::HOMING:
                 detectedStroke = do_Homing(pCtrl);
-                if (detectedStroke > 0)
-                {
+                if (detectedStroke > 0) {
                     currentMode = MotionCtrl::Modes::READY;
                 }
                 break;
             case MotionCtrl::Modes::READY:
-                MotorOnOff(pCtrl, 0); // Turn Motor OFF // TODO REMOVE ME
+                MotorOnOff(pCtrl, 0);  // Turn Motor OFF // TODO REMOVE ME
                 break;
             case MotionCtrl::Modes::STROKE:
                 break;
             case MotionCtrl::Modes::EMERGENCYSTOP:
-                MotorOnOff(pCtrl, 0); // Turn Motor OFF
+                MotorOnOff(pCtrl, 0);  // Turn Motor OFF
                 break;
         }
         vTaskDelay(500 / portTICK_PERIOD_MS);
-    } // while 1
+    }  // while 1
 }
 
-void MotionCtrl::RequestModeSet(Modes Mode)
-{
-    if (Mode == MotionCtrl::Modes::EMERGENCYSTOP)
-    {
+void MotionCtrl::RequestModeSet(Modes Mode) {
+    if (Mode == MotionCtrl::Modes::EMERGENCYSTOP) {
         ESP_LOGI(TAG, "Emergency Stop!");
         gpio_set_level(MotorEnaPin, 1);
         RunMode = MotionCtrl::Modes::EMERGENCYSTOP;
@@ -249,8 +226,7 @@ void MotionCtrl::RequestModeSet(Modes Mode)
     ReqMode = Mode;
 }
 
-esp_err_t MotionCtrl::Create(const UBaseType_t TaskPrio, QueueHandle_t xQueue, sMotorData MData)
-{
+esp_err_t MotionCtrl::Create(const UBaseType_t TaskPrio, QueueHandle_t xQueue, sMotorData MData) {
     xADCQueue = xQueue;
     MotorData = MData;
 
@@ -271,7 +247,7 @@ esp_err_t MotionCtrl::Create(const UBaseType_t TaskPrio, QueueHandle_t xQueue, s
     io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
     gpio_config(&io_conf);
     gpio_install_isr_service(ESP_INTR_FLAG_EDGE);
-    gpio_isr_handler_add(MotorAlmPin, alarm_isr_handler, (void*)this);
+    gpio_isr_handler_add(MotorAlmPin, alarm_isr_handler, reinterpret_cast<void*>(this));
 
     // Worker Task
     // xTaskCreate(vWorker, "MotionCtrl", 2048, this, TaskPrio, &xWorkerHandle);

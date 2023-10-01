@@ -23,8 +23,7 @@ QueueHandle_t xADCQueue2 = NULL;
 TaskHandle_t xHandle = NULL;
 /****************************** Functions */
 
-ADCObject::ADCObject(const int Ana1, const int Ana2)
-{
+ADCObject::ADCObject(const int Ana1, const int Ana2) {
     anaIn1 = Ana1;
     anaIn2 = Ana2;
     AdcChan0 = ADC_CHANNEL_0;
@@ -36,10 +35,8 @@ ADCObject::ADCObject(const int Ana1, const int Ana2)
 ADCObject::~ADCObject() {}
 
 // The Worker Task
-static void vWorker(void* pvParameter)
-{
-    while (1)
-    {
+static void vWorker(void* pvParameter) {
+    while (1) {
         int adc_raw[2];
         ESP_ERROR_CHECK(adc_oneshot_read(adc_handle, AdcChan0, &adc_raw[0]));
         xQueueOverwrite(xADCQueue1, &adc_raw[0]);
@@ -51,8 +48,7 @@ static void vWorker(void* pvParameter)
     }
 }
 
-esp_err_t ADCObject::Create(const UBaseType_t TaskPrio, QueueHandle_t& xQueue1, QueueHandle_t& xQueue2)
-{
+esp_err_t ADCObject::Create(const UBaseType_t TaskPrio, QueueHandle_t& xQueue1, QueueHandle_t& xQueue2) {
     adc_unit_t UnitId0 = ADC_UNIT_1;
     adc_unit_t UnitId1 = ADC_UNIT_1;
 
@@ -63,8 +59,7 @@ esp_err_t ADCObject::Create(const UBaseType_t TaskPrio, QueueHandle_t& xQueue1, 
     ESP_ERROR_CHECK(adc_oneshot_io_to_channel(anaIn2, &UnitId1, &AdcChan1));
     ESP_LOGI(TAG, "IO = %d Unit=%d, Chan=%d", anaIn2, (int)UnitId1, (int)AdcChan1);
 
-    if (UnitId0 != UnitId1)
-    {
+    if (UnitId0 != UnitId1) {
         ESP_LOGE(TAG, "ADC units must match!");
         return ESP_FAIL;
     }

@@ -9,8 +9,8 @@
 #ifndef COMPONENTS_ENCODER_ENCODER_H_
 #define COMPONENTS_ENCODER_ENCODER_H_
 
-#include <esp_err.h> // NOLINT
-#include <stdint.h>  // NOLINT
+#include <esp_err.h>  // NOLINT
+#include <stdint.h>   // NOLINT
 #include <stdio.h>
 
 #include "../../main/ossm_config.h"
@@ -18,14 +18,13 @@
 #include "driver/pulse_cnt.h"
 #include "esp_log.h"
 #include "esp_sleep.h"
-#include "freertos/FreeRTOS.h" // NOLINT
-#include "freertos/queue.h"    // NOLINT
+#include "freertos/FreeRTOS.h"  // NOLINT
+#include "freertos/queue.h"     // NOLINT
 #include "freertos/task.h"
 #include "sdkconfig.h"
 
-class Encoder
-{
-   public:
+class Encoder {
+ public:
     /**
      * @brief Construct a new Encoder
      *
@@ -43,7 +42,7 @@ class Encoder
      * @param xQueue2 Queue for the Button [Out]
      * @return esp_err_t
      */
-    esp_err_t Create(QueueHandle_t& xQueueE, QueueHandle_t& xQueueB);
+    esp_err_t Create(QueueHandle_t& xQueueE, QueueHandle_t& xQueueB);  // NOLINT(runtime/references)
 
     /**
      * @brief Return the current counter value
@@ -59,11 +58,11 @@ class Encoder
      */
     QueueHandle_t GetButtonQueue();
 
-   private:
+ private:
     pcnt_unit_handle_t pcnt_unit = NULL;
     gpio_num_t pinButton;
     gpio_num_t pinEncA;
     gpio_num_t pinEncB;
 };
 
-#endif // COMPONENTS_ENCODER_ENCODER_H_
+#endif  // COMPONENTS_ENCODER_ENCODER_H_
