@@ -8,17 +8,16 @@
 #ifndef MAIN_OSSM_CONFIG_H_
 #define MAIN_OSSM_CONFIG_H_
 
-#define SW_VERSION "0.01"           // The SW Version
-#define LED_PIN GPIO_NUM_25         // GPIO for the WS2813 RGB LED
-#define LED_COUNT 1                 // Number of LEDs
-#define ANA2_PIN 34                 // Wired Controller: Speed Poti
-#define ENCODER_SW_PIN GPIO_NUM_35  // Wired Controller: Encoder Switch
-#define ENCODER_A_PIN GPIO_NUM_18   // Wired Controller: Encoder A
-#define ENCODER_B_PIN GPIO_NUM_5    // Wired Controller: Encoder B
-#define MOTOR_CURRENT_PIN 36        // Motor current sensing
-#define MOTOR_ENA_PIN GPIO_NUM_26   // Motor Enable
-#define MOTOR_STP_PIN GPIO_NUM_14   // Motor Step
-// #define MOTOR_PED_PIN GPIO_NUM_14       // Motor PED Pin
+#define SW_VERSION "0.01"                // The SW Version
+#define LED_PIN GPIO_NUM_25              // GPIO for the WS2813 RGB LED
+#define LED_COUNT 1                      // Number of LEDs
+#define ANA2_PIN 34                      // Wired Controller: Speed Poti
+#define ENCODER_SW_PIN GPIO_NUM_35       // Wired Controller: Encoder Switch
+#define ENCODER_A_PIN GPIO_NUM_18        // Wired Controller: Encoder A
+#define ENCODER_B_PIN GPIO_NUM_5         // Wired Controller: Encoder B
+#define MOTOR_CURRENT_PIN 36             // Motor current sensing
+#define MOTOR_ENA_PIN GPIO_NUM_26        // Motor Enable
+#define MOTOR_STP_PIN GPIO_NUM_14        // Motor Step
 #define MOTOR_DIR_PIN GPIO_NUM_27        // Motor Direction
 #define MOTOR_ALARM_PIN GPIO_NUM_13      // Motor Alarm
 #define REMOTE_LCD_SDA GPIO_NUM_21       // GLCD SDA Pin
@@ -32,6 +31,7 @@
 // #define STATS_DISPLAY (5 * 1000)        // Rate of printing stats on console
 // #define STATS_NVSTORE (1 * 60 * 1000)   // Rate of writing stats to NV storage
 #define SYSTEM_HOSTNAME "OSSM"  // Hostname for WiFi
+#define WDT_TIMEOUT 500         // Watchdog timeout in ms
 
 // System configuration
 static const uint16_t default_EmergencyAdc = 4000;    // ADC Value for triggering emergency

@@ -8,22 +8,22 @@
 /****************************** Includes  */
 #include "motionctrl.h"
 
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
+#include <stdio.h>   // NOLINT
+#include <string.h>  // NOLINT
+#include <unistd.h>  // NOLINT
 
-#include "esp_log.h"
-#include "esp_sleep.h"
-#include "esp_timer.h"
-#include "sdkconfig.h"
+#include "esp_log.h"       // NOLINT
+#include "esp_sleep.h"     // NOLINT
+#include "esp_task_wdt.h"  // NOLINT
+#include "esp_timer.h"     // NOLINT
+#include "sdkconfig.h"     // NOLINT
 
 /****************************** Configuration */
 
 /****************************** Statics */
 static const char* TAG = "MOTION";
-
-QueueHandle_t xADCQueue;            // The Queue to receive ADC Values from
-TaskHandle_t xWorkerHandle = NULL;  // The Worker Task Handle
+static QueueHandle_t xADCQueue;            // The Queue to receive ADC Values from
+static TaskHandle_t xWorkerHandle = NULL;  // The Worker Task Handle
 
 /****************************** Functions */
 
@@ -67,6 +67,7 @@ static uint16_t makeSteps(gpio_num_t pin, uint16_t steps, bool GoFast = false) {
         gpio_set_level(pin, 0);
         usleep(delay);
     }
+    esp_task_wdt_reset();
     return steps;
 }
 
@@ -74,8 +75,6 @@ static uint16_t makeSteps(gpio_num_t pin, uint16_t steps, bool GoFast = false) {
 static uint32_t gotoEndpoint(MotionCtrl* pCtrl, uint32_t MaxSteps, uint32_t cOffset, uint32_t cLimit) {
     const uint32_t StepsPerLoop = 10;
     uint32_t StepsDone = 0;
-    const uint32_t stepsPerMM =
-        pCtrl->getMotorData().StepsPerRev / (pCtrl->getMotorData().PulleyTeeth * pCtrl->getMotorData().BeltPitch);
 
     for (uint32_t Step = 0; Step < MaxSteps; Step += StepsPerLoop) {
         int adcval;
@@ -114,12 +113,14 @@ static float do_Homing(MotionCtrl* pCtrl) {
     ESP_LOGI(TAG, "Homing...");
 
     MotorOnOff(pCtrl, 0);  // Turn Motor OFF
-    vTaskDelay(500 / portTICK_PERIOD_MS);
+    esp_task_wdt_reset();
+    vTaskDelay(250 / portTICK_PERIOD_MS);
     MotorOnOff(pCtrl, 1);  // Turn Motor ON
     vTaskDelay(100 / portTICK_PERIOD_MS);
 
     for (uint8_t i = 0; i < numAverage; i++) {
         uint16_t adcval;
+        esp_task_wdt_reset();
         if (xQueueReceive(xADCQueue, &adcval, portMAX_DELAY) == pdTRUE) {
             CurrentOffset += adcval;
         }
@@ -133,11 +134,11 @@ static float do_Homing(MotionCtrl* pCtrl) {
     gotoEndpoint(pCtrl, MaxSteps, CurrentOffset, currentLimit);
 
     // Move back 5mm from endpoint
-    vTaskDelay(500 / portTICK_PERIOD_MS);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
     gpio_set_level(pCtrl->getDirPin(), 1);
     makeSteps(pCtrl->getStepPin(), EndpointDistance);
 
-    vTaskDelay(500 / portTICK_PERIOD_MS);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
 
     // Find reverse Limit
     ESP_LOGI(TAG, "Reverse Limit...");
@@ -145,7 +146,7 @@ static float do_Homing(MotionCtrl* pCtrl) {
     strokeSteps = gotoEndpoint(pCtrl, MaxSteps, CurrentOffset, currentLimit);
 
     // Move back 5mm from endpoint
-    vTaskDelay(500 / portTICK_PERIOD_MS);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
     gpio_set_level(pCtrl->getDirPin(), 0);
     makeSteps(pCtrl->getStepPin(), EndpointDistance);
     strokeSteps = strokeSteps - EndpointDistance;
@@ -161,6 +162,9 @@ static void vWorker(void* pvParameter) {
     MotionCtrl::Modes currentMode = MotionCtrl::Modes::NONE;
     MotionCtrl* pCtrl = reinterpret_cast<MotionCtrl*>(pvParameter);
     float detectedStroke = 0.0;  // Stroke in mm
+
+    ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
+    ESP_ERROR_CHECK(esp_task_wdt_status(NULL));
 
     while (1) {
         // Handle State Change Request
@@ -197,7 +201,7 @@ static void vWorker(void* pvParameter) {
                 MotorOnOff(pCtrl, 0);  // Turn Motor OFF
                 break;
             case MotionCtrl::Modes::HOMING:
-                detectedStroke = do_Homing(pCtrl);
+                detectedStroke = do_Homing(pCtrl);  // Blocking!
                 if (detectedStroke > 0) {
                     currentMode = MotionCtrl::Modes::READY;
                 }
@@ -211,16 +215,21 @@ static void vWorker(void* pvParameter) {
                 MotorOnOff(pCtrl, 0);  // Turn Motor OFF
                 break;
         }
-        vTaskDelay(500 / portTICK_PERIOD_MS);
+        esp_task_wdt_reset();
+        vTaskDelay(100 / portTICK_PERIOD_MS);
     }  // while 1
 }
 
 void MotionCtrl::RequestModeSet(Modes Mode) {
+    // NOTE: May be called from ISR!
     if (Mode == MotionCtrl::Modes::EMERGENCYSTOP) {
-        ESP_LOGI(TAG, "Emergency Stop!");
         gpio_set_level(MotorEnaPin, 1);
         RunMode = MotionCtrl::Modes::EMERGENCYSTOP;
         ReqMode = MotionCtrl::Modes::EMERGENCYSTOP;
+
+        if (esp_task_wdt_status(xWorkerHandle) == ESP_OK) {
+            ESP_ERROR_CHECK(esp_task_wdt_delete(xWorkerHandle));
+        }
         vTaskSuspend(xWorkerHandle);
     }
     ReqMode = Mode;
@@ -250,7 +259,6 @@ esp_err_t MotionCtrl::Create(const UBaseType_t TaskPrio, QueueHandle_t xQueue, s
     gpio_isr_handler_add(MotorAlmPin, alarm_isr_handler, reinterpret_cast<void*>(this));
 
     // Worker Task
-    // xTaskCreate(vWorker, "MotionCtrl", 2048, this, TaskPrio, &xWorkerHandle);
     xTaskCreatePinnedToCore(vWorker, "MotionCtrl", 2048, this, TaskPrio, &xWorkerHandle, 1);
     if (NULL == xWorkerHandle) return ESP_FAIL;
 

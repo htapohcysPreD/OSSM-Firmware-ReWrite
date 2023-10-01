@@ -22,6 +22,7 @@
 #include "esp_log.h"            // NOLINT
 #include "esp_ota_ops.h"        // NOLINT
 #include "esp_partition.h"      // NOLINT
+#include "esp_task_wdt.h"       // NOLINT
 #include "freertos/FreeRTOS.h"  // NOLINT
 #include "freertos/task.h"      // NOLINT
 
@@ -32,20 +33,28 @@
 /****************************** Statics */
 static const char* TAG = "MAIN";
 
-LEDObject TheLEDs(LED_COUNT, LED_PIN);                                              // The LED(s)
-OSSMLCD TheGLCD(REMOTE_LCD_SDA, REMOTE_LCD_CLK, REMOTE_LCD_ADDRESS);                // The GLCD on the wired Remote
-Encoder TheEncoder(ENCODER_SW_PIN, ENCODER_A_PIN, ENCODER_B_PIN);                   // The Encoder on the wired Remote
-ADCObject TheADCs(ANA2_PIN, MOTOR_CURRENT_PIN);                                     // ADC Inputs
-MotionCtrl TheMCtrl(MOTOR_ENA_PIN, MOTOR_ALARM_PIN, MOTOR_STP_PIN, MOTOR_DIR_PIN);  // The Motion Controller
+static LEDObject TheLEDs(LED_COUNT, LED_PIN);                                // The LED(s)
+static OSSMLCD TheGLCD(REMOTE_LCD_SDA, REMOTE_LCD_CLK, REMOTE_LCD_ADDRESS);  // The GLCD on the wired Remote
+static Encoder TheEncoder(ENCODER_SW_PIN, ENCODER_A_PIN, ENCODER_B_PIN);     // The Encoder on the wired Remote
+static ADCObject TheADCs(ANA2_PIN, MOTOR_CURRENT_PIN);                       // ADC Inputs
+static MotionCtrl TheMCtrl(MOTOR_ENA_PIN, MOTOR_ALARM_PIN, MOTOR_STP_PIN, MOTOR_DIR_PIN);  // The Motion Controller
 
-QueueHandle_t xAdcQueuePoti = NULL;     // Poti ADC values
-QueueHandle_t xAdcQueueMCur = NULL;     // Motor Current Values
-QueueHandle_t xEncQueueButton = NULL;   // Push Button
-QueueHandle_t xEncQueueEncoder = NULL;  // Encoder Value
+static QueueHandle_t xAdcQueuePoti = NULL;     // Poti ADC values
+static QueueHandle_t xAdcQueueMCur = NULL;     // Motor Current Values
+static QueueHandle_t xEncQueueButton = NULL;   // Push Button
+static QueueHandle_t xEncQueueEncoder = NULL;  // Encoder Value
 
-TaskHandle_t xSupervisorHandle = NULL;
+static TaskHandle_t xSupervisorHandle = NULL;
+
+volatile static bool TriggerEmergency = false;
 
 /****************************** Functions */
+
+// TWDT Interrupt: Go to Emergency
+extern "C" void esp_task_wdt_isr_user_handler(void) {
+    TriggerEmergency = true;
+    TheMCtrl.RequestModeSet(MotionCtrl::Modes::EMERGENCYSTOP);
+}
 
 /**
  * @brief Dev Function: Print Task Statistics
@@ -115,10 +124,9 @@ static void vSupervisor(void* pvParameter) {
         if (xQueuePeek(xQueue, &adcval, 0) == pdTRUE) {
             if (adcval >= default_EmergencyAdc) {
                 OverCurrCnt++;
-
                 if (OverCurrCnt > SUPERVIS_OVERCUR_CNT) {
-                    ESP_LOGW(TAG, "System Supervisor gets ADC = %d", adcval);
-                    TheMCtrl.RequestModeSet(MotionCtrl::Modes::EMERGENCYSTOP);
+                    ESP_LOGW(TAG, "System Supervisor triggers EMERGENCY, Reason: Motor Current");
+                    TriggerEmergency = true;
                 }
             } else {
                 OverCurrCnt = 0;
@@ -126,6 +134,15 @@ static void vSupervisor(void* pvParameter) {
         }
 
         // TODO Check Emergency Off Switch
+
+        if (TriggerEmergency) {
+            ESP_LOGE(TAG, "Emergency triggered!");
+            TheMCtrl.RequestModeSet(MotionCtrl::Modes::EMERGENCYSTOP);
+            TriggerEmergency = false;
+
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+            abort();
+        }
 
         vTaskDelay(25 / portTICK_PERIOD_MS);
     }
@@ -166,6 +183,15 @@ extern "C" void app_main() {
         ESP_LOGI(TAG, "  State = %d", ota_state);
     }
     ESP_LOGI(TAG, "------------------------------------------");
+
+    // Setup Task Watchdog
+    esp_task_wdt_config_t twdt_config = {
+        .timeout_ms = WDT_TIMEOUT,
+        .idle_core_mask = (1 << portNUM_PROCESSORS) - 1,  // Bitmask of all cores
+        .trigger_panic = false,
+    };
+    ESP_ERROR_CHECK(esp_task_wdt_init(&twdt_config));
+    ESP_LOGI(TAG, "WDT initialised");
 
     // Setup the modules
     STOR_Init();  // Non-Volatile Storage
