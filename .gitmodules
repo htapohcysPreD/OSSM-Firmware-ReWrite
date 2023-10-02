@@ -1,3 +1,6 @@
 [submodule "components/u8g2"]
 	path = components/u8g2
 	url = https://github.com/olikraus/u8g2.git
+[submodule "components/FastAccelStepper"]
+	path = components/FastAccelStepper
+	url = https://github.com/htapohcysPreD/FastAccelStepper-ESP32.git
